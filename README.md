@@ -1,14 +1,31 @@
-# ExampleMod
+# ADSessionAnnouncer
 
-A [ResoniteModLoader](https://github.com/resonite-modding-group/ResoniteModLoader) mod for [Resonite](https://resonite.com/) that does something.
-<!-- Edit to describe what your mod does and what it may solve -->
-<!-- If your mod solves an issue, you should link to any relevant issues on the resonite github -->
+A [ResoniteModLoader](https://github.com/resonite-modding-group/ResoniteModLoader) mod for [Resonite](https://resonite.com/) to announce your session to a restricted session system like the AD Session Browser. This is a headless only mod and will not work on the client.
 
-
-## Screenshots
-<!-- If your mod has visible effects in the game, attach some images or video of it in-use here! Otherwise remove this section -->
+If enabled, ADSessionAnnouncer hooks into when a world is created and starts a POST request every 30 seconds to the specified Server with the details of your session needed to be on the AD Session Browser. 
 
 ## Installation
 1. Install [ResoniteModLoader](https://github.com/resonite-modding-group/ResoniteModLoader).
-1. Place [ExampleModName.dll](https://github.com/YourGithubUsername/YourModRepoName/releases/latest/download/ExampleModName.dll) into your `rml_mods` folder. This folder should be at `C:\Program Files (x86)\Steam\steamapps\common\Resonite\rml_mods` for a default install. You can create it if it's missing, or if you launch the game once with ResoniteModLoader installed it will create this folder for you.
-1. Start the game. If you want to verify that the mod is working you can check your Resonite logs.
+1. Place [ADSessionAnnouncer.dll](https://github.com/GrandtheUK/ADSessionAnnouncer/releases/latest/download/ADSessionAnnouncer.dll) into your `rml_mods` folder on your headless. This folder should be at `{steam path}\steamapps\common\Resonite\Headless\rml_mods` for a default install. You can create it if it's missing, or if you launch the game once with ResoniteModLoader installed it will create this folder for you.
+1. Start the Headless. If you want to verify that the mod is working you can check your Resonite logs.
+
+## Configuration
+ADSessionAnnouncer should auto-generate a template in `Resonite\Headless\rml_config\` on its first launch.
+
+The mod has global options for the ServerKey to use to make the requests (which must be registered with the server browser host you use) and a server to make the requests to. also there are also options on how to display your community with the CommunityName (the name to show for your category), DiscordLink (a link to your community discord) and LogoUri (a link to an image of your community logo).
+
+A Session is announced if it's SessionId is configured in the Announcer config under the `Sessions` list. Each session can declare its own preview image (in the form of a uri which can be either a resdb link or a normal weblink to an image). The following is a snippet for a world configuration to be placed into the `Sessions` list in the config.
+```json
+{
+    "SessionId":"U-Yourheadless:SessionName",
+    "PreviewUri":"resdb:///220353c878315cee79a36862d4773a88de80d67155ffde5e14d0abb9097a011b.webp"
+}
+```
+
+## Known Issues
+Currently there are issues with reading the List of objects from the config
+
+## Planned
+- Command to start new AD Session without editing the config before launch
+- Look into if making this mod work with the client is possible
+- config option and command for enabling or disabling announcing a session individually

@@ -1,15 +1,15 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<RootNamespace>ExampleMod</RootNamespace>
-		<AssemblyName>ExampleMod</AssemblyName>
+		<RootNamespace>ADSessionAnnouncer</RootNamespace>
+		<AssemblyName>ADSessionAnnouncer</AssemblyName>
 		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
 		<TargetFramework>net472</TargetFramework>
 		<FileAlignment>512</FileAlignment>
-		<LangVersion>10.0</LangVersion>
+		<LangVersion>11.0</LangVersion>
 		<Nullable>enable</Nullable>
 		<Deterministic>true</Deterministic>
 		<!-- Change CopyToMods to true if you'd like builds to be moved into the Mods folder automatically-->
-		<CopyToMods Condition="'$(CopyToMods)'==''">true</CopyToMods>
+		<CopyToMods Condition="'$(CopyToMods)'==''">false</CopyToMods>
 		<DebugType Condition="'$(Configuration)'=='Debug'">embedded</DebugType>
 	</PropertyGroup>
 
@@ -18,6 +18,7 @@
 		<ResonitePath>$(MSBuildThisFileDirectory)Resonite/</ResonitePath>
 		<ResonitePath Condition="Exists('C:\Program Files (x86)\Steam\steamapps\common\Resonite\')">C:\Program Files (x86)\Steam\steamapps\common\Resonite\</ResonitePath>
 		<ResonitePath Condition="Exists('$(HOME)/.steam/steam/steamapps/common/Resonite/')">$(HOME)/.steam/steam/steamapps/common/Resonite/</ResonitePath>
+		<ResonitePath Condition="Exists('$(HOME)/DATA/SteamLibrary/steamapps/common/Resonite/')">$(HOME)/DATA/SteamLibrary/steamapps/common/Resonite/</ResonitePath>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -34,6 +35,31 @@
 		    <HintPath>$(ResonitePath)Resonite_Data\Managed\FrooxEngine.dll</HintPath>
 		    <Private>False</Private>
 		</Reference>
+		<Reference Include="FrooxEngine.Store">
+		    <HintPath>$(ResonitePath)Resonite_Data\Managed\FrooxEngine.Store.dll</HintPath>
+		    <Private>False</Private>
+		</Reference>
+		<Reference Include="SkyFrost.Base">
+		    <HintPath>$(ResonitePath)Resonite_Data\Managed\SkyFrost.Base.dll</HintPath>
+		    <Private>False</Private>
+		</Reference>
+		<Reference Include="SkyFrost.Base.Models">
+		    <HintPath>$(ResonitePath)Resonite_Data\Managed\SkyFrost.Base.Models.dll</HintPath>
+		    <Private>False</Private>
+		</Reference>
+		<Reference Include="Elements.Core">
+		    <HintPath>$(ResonitePath)Resonite_Data\Managed\Elements.Core.dll</HintPath>
+		    <Private>False</Private>
+		</Reference>
+		<Reference Include="System.net.Http">
+			<HintPath>$(ResonitePath)Resonite_Data\Managed\System.net.Http.dll</HintPath>
+			<Private>False</Private>
+		</Reference>
+		<Reference Include="System.Text.Json">
+			<HintPath>$(ResonitePath)Resonite_Data\Managed\System.Text.Json.dll</HintPath>
+			<Private>False</Private>
+		</Reference>
+		
 	</ItemGroup>
 
 	<Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition="'$(CopyToMods)'=='true'">
