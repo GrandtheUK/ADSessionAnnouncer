@@ -20,15 +20,23 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Drawing.Printing;
 
+
+
 namespace ADSessionAnnouncer;
+using ADSession = Dictionary<string,string>;
 //More info on creating mods can be found https://github.com/resonite-modding-group/ResoniteModLoader/wiki/Creating-Mods
 public class ADSessionAnnouncer : ResoniteMod {
-	internal const string VERSION_CONSTANT = "1.0.0"; //Changing the version here updates it in all locations needed
+	internal const string VERSION_CONSTANT = "1.1.0"; //Changing the version here updates it in all locations needed
 	public override string Name => "ADSessionAnnouncer";
 	public override string Author => "Grand";
 	public static ModConfiguration? Config;
 	public override string Version => VERSION_CONSTANT;
 	public override string Link => "https://github.com/GrandtheUK/ADSessionAnnouncer";
+	private Thread _thread;
+	private bool _loop;
+	private List<World> _worlds;
+	private HttpClient _client;
+	private string key;
 
 	[AutoRegisterConfigKey]
 	public static readonly ModConfigurationKey<bool> Enabled =
@@ -68,78 +76,105 @@ public class ADSessionAnnouncer : ResoniteMod {
 		Config.Save(true);
 		Harmony harmony = new("GrandtheUK.ADSessionAnnouncer");
 		harmony.PatchAll();
+		// start Announce thread and create onShutdown hook to stop it
 		Engine.Current.RunPostInit(() => {
-			Engine.Current.WorldManager.WorldAdded += ADSessionAnnounce;
+			_thread = new Thread(() => Announce());
+			Engine.Current.OnShutdown += StopAnnouce;
+			_thread.Start();
+			if (_thread.IsAlive){
+				Msg("Announce Thread is alive");
+			}
 		});
 	}
 
-	private void ADSessionAnnounce(World w) {
-		if (!(Config?.GetValue<bool>(Enabled)) ?? true) {
-			Msg("ADSessionAnnouncer is not enabled. Not Announcing");
-			return;
-		}
-		List<ADSession> ad_list = Config?.GetValue<List<ADSession>>(Sessions) ?? new List<ADSession>();
-		if (!ad_list.Any()) {
-			Msg("list of AD Session is empty. Not Announcing");
-			return;
-		}
-		ADSession ad = ad_list.Find( ad => { return ad.SessionId == w.SessionId; });
-		if (ad.SessionId==""){
-			Msg("SessionId is not in list of AD Sessions. Not Announcing");
-			return;
-		}
-		async void Announce() {
-			List<ADSession> ad_list = Config?.GetValue(Sessions) ?? new List<ADSession>();
-			string Logo = Config?.GetValue(LogoUri);
-			string Community = Config?.GetValue(CommunityName);
-			string Discord = Config?.GetValue(DiscordLink);
-			ADSession ad = ad_list.Find( ad => { return ad.SessionId == w.SessionId; });
-			if (w.AccessLevel!= SessionAccessLevel.RegisteredUsers || !w.HideFromListing) {
-				Msg($"Session is not set to RegisteredUsers and isn't hidden from the Session Browser. Not Announcing. accessLevel: {w.AccessLevel}, hidden:{w.HideFromListing}");
-				return;
+	void StopAnnouce() {
+		_loop = false;
+		_thread.Join();
+	}
+	async void Announce() {
+		_worlds = new();
+		_client = new();
+		List<ADSession> ADList = new();
+		key = (Config?.GetValue(ServerKey)) ?? "";
+
+		// initialise loop if mod is enabled.
+		_loop = (Config?.GetValue(Enabled)) ?? false;
+		while (_loop) {
+			string Logo = Config?.GetValue(LogoUri) ?? "";
+			string Community = Config?.GetValue(CommunityName) ?? "No Community";
+			string Discord = Config?.GetValue(DiscordLink) ?? "";
+			Engine.Current.WorldManager.GetWorlds(_worlds);
+
+			
+			// Filter world list to only those that have an entry in the AD session list config
+			ADList = Config?.GetValue(Sessions) ?? new();
+			List<string> SessionFilter = new();
+			foreach(ADSession session in ADList) {
+				SessionFilter.Add(session["SessionId"]);
 			}
-			List<FrooxEngine.User> users = new();
-			String userlist = "";
-			w.GetUsers(users);
-			foreach (FrooxEngine.User user in users) {
-				if (user != w.HostUser) {
-					userlist+=$"{user.UserID},";
+			
+			_worlds = _worlds.Where( w => {return SessionFilter.Contains(w.SessionId);}).ToList();
+			
+
+			//If no world remain then sleep for 30s before retrying on the next interval
+			if (!_worlds.Any()) {
+				Thread.Sleep(30000);
+				continue;
+			}
+
+			// Announce each world remaining in the world list
+			foreach (World w in _worlds) {
+				ADSession ad = ADList.Find( ad => { return ad["SessionId"] == w.SessionId; });
+				// If a session isn't set to RegisteredUsers and hidden from the normal session browser, do not announce
+				if (w.AccessLevel!= SessionAccessLevel.RegisteredUsers || !w.HideFromListing) {
+					Msg($"Session {w.SessionId} is not set to RegisteredUsers and isn't hidden from the Session Browser. Not Announcing. accessLevel: {w.AccessLevel}, hidden:{w.HideFromListing}");
+					continue;
+				}
+
+				// Get users in a session and put them in a comma separated string
+				List<FrooxEngine.User> users = new();
+				String userlist = "";
+				w.GetUsers(users);
+				foreach (FrooxEngine.User user in users) {
+					// if the user is a headless, do not list
+					if (user.HeadDevice != HeadOutputDevice.Headless) {
+						userlist+=$"{user.UserID},";
+					}
+				}
+				// format for the AD Session Browser POST request
+				var form = new ADSession
+				{
+					{"oper","push"},
+					{"key", key},
+					{"session", w.SessionId},
+					{"communityname", Community},
+					{"communitydiscord", Discord},
+					{"communitylogo", Logo},
+					{"sessionpreview", ad["PreviewUri"]},
+					{"sessionname", w.Name},
+					{"sessionhost", Engine.Current.LocalUserName},
+					{"usercount", $"{w.UserCount-1}/{w.MaxUsers-1}"},
+					{"userlist", userlist}
+				};
+				String requestUri = (Config?.GetValue(Server)) ?? "";
+
+				// Convert the form to URLEncoded and send the ping
+				HttpContent content = new FormUrlEncodedContent(form);
+				try {
+					Task<HttpResponseMessage> response = _client.PostAsync(requestUri, content);
+					// Wait for response to check if successful and log the success or failure
+					String StringResponse = await response.Result.Content.ReadAsStringAsync();
+					if (!response.Result.IsSuccessStatusCode) {
+						Error($"Announcing {w.SessionId} was unsuccessful at {DateTime.Now}");
+					}
+				} catch (Exception ex) {
+					// if connection has an exception for any reason the announce has failed
+					Error($"Announcing unsuccessful at {DateTime.Now}");
 				}
 			}
-
-			String key = (Config?.GetValue<String>(ServerKey)) ?? "";
-			var form = new Dictionary<string,string>
-			{
-				{"oper","push"},
-				{"key", key},
-				{"session", w.SessionId},
-				{"communityname", Community},
-				{"communitydiscord", Discord},
-				{"communitylogo", Logo},
-				{"sessionpreview", ad.PreviewUri},
-				{"sessionname", w.Name},
-				{"sessionhost", Engine.Current.LocalUserName},
-				{"usercount", $"{w.UserCount-1}/{w.MaxUsers-1}"},
-				{"userlist", userlist}
-			};
-			Msg($"Announcing Session ({w.SessionId}) with preview ({ad.PreviewUri})");
-
-			HttpClient client = new();
-			String requestUri = (Config?.GetValue(Server)) ?? "";
-
-			HttpContent content = new FormUrlEncodedContent(form);
-			Task<HttpResponseMessage> response = client.PostAsync(requestUri, content);
-
-			String StringResponse = await response.Result.Content.ReadAsStringAsync();
-			if (response.Result.IsSuccessStatusCode) {
-				Msg($"Connection success");
-			} else {
-				Msg($"Connection unsuccessful");
-			}
-			w.RunInSeconds(30,Announce);
+			// Sleep for 30s until the next time to ping
+			Thread.Sleep(30000);
 		}
-		w.RunInSeconds(30,Announce);
-	}
-	
-	public record struct ADSession(string SessionId, string PreviewUri);
+		Msg("Ending Announce Thread");
+	}	
 }
